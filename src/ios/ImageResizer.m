@@ -16,26 +16,35 @@
     
     imageRequestOptions.synchronous = YES;
     
-    NSLog(@"IMAGE RESIZER START ----------------------------------------------------------------------------");
+    NSLog(@"IMAGE RESIZER START ------------------------------------------");
     
     // get the arguments and the stuff inside of it
     NSDictionary* arguments = [command.arguments objectAtIndex:0];
+    NSLog(@"arguments:%@", arguments);
+    
     NSString* imageUrlString = [arguments objectForKey:@"uri"];
     NSLog(@"Image Resizer Image URL : %@",imageUrlString);
     
     NSString* quality = [arguments objectForKey:@"quality"];
-    CGSize frameSize = CGSizeMake([[arguments objectForKey:@"width"] floatValue], [[arguments objectForKey:@"height"] floatValue]);
+//    CGSize frameSize = CGSizeMake([[arguments objectForKey:@"width"] floatValue], [[arguments objectForKey:@"height"] floatValue]);
+    CGSize frameSize = CGSizeMake(400, 400);
     NSString* fileName = [arguments objectForKey:@"fileName"];
+    NSString* thumbnailPath = [arguments objectForKey:@"thumbnailPath"];
     
+    NSLog(@"resize(): frameSize (%f, %f)", frameSize.width, frameSize.height);
     BOOL asBase64 = [[arguments objectForKey:@"base64"] boolValue];
     BOOL fixRotation = [[arguments objectForKey:@"fixRotation"] boolValue];
     
     // Check if the file is a local file, and if so, read with file manager to avoid NSUrl -1022 error
     if ([[NSFileManager defaultManager] fileExistsAtPath:imageUrlString]){
+        NSLog(@"Local file");
         sourceImage = [UIImage imageWithData: [[NSFileManager defaultManager] contentsAtPath:imageUrlString]];
-    }else {
+    } else {
+        NSLog(@"Not local file");
         sourceImage = [UIImage imageWithData: [NSData dataWithContentsOfURL: [NSURL URLWithString:imageUrlString]]];
     }    
+    
+    NSLog(@"sourceImage = %@", sourceImage);
     
     int rotation = 0;
     
@@ -67,12 +76,12 @@
                          UIImageOrientation orientation,
                          NSDictionary *info)
          {
-             sourceImage  = [UIImage imageWithData:imageData];
+            self->sourceImage  = [UIImage imageWithData:imageData];
          }];
         
     }];
-    
-    NSLog(@"image resizer:%@",  (sourceImage ? @"image exists" : @"null" ));
+    NSLog(@"image resizer sourceImage :%@", sourceImage);
+    NSLog(@"image resizer check image exists :%@",  (sourceImage ? @"image exists" : @"null" ));
     
     UIImage *tempImage = nil;
     CGSize targetSize = frameSize;
@@ -106,15 +115,21 @@
     UIGraphicsBeginImageContext(targetSize);
     [sourceImage drawInRect:thumbnailRect];
     
+    NSLog(@"targetSize (%f, %f)", targetSize.width, targetSize.height);
+    
     tempImage = UIGraphicsGetImageFromCurrentImageContext();
-    NSLog(@"image resizer:%@",  (tempImage  ? @"image exsist" : @"null" ));
+    NSLog(@"image resizer: tempImage = %@", tempImage);
+    NSLog(@"fixRotation = %@", (fixRotation) ? @"TRUE": @"FALSE");
     
     if(fixRotation){
         tempImage = [self rotateImage:tempImage withRotation:rotation];
     }
     
+    NSLog(@"tempImage: %@", tempImage);
+    
     UIGraphicsEndImageContext();
     NSData *imageData = UIImageJPEGRepresentation(tempImage, [quality floatValue] / 100.0f );
+    //NSDocumentDirectory, NSCachesDirectory
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
     NSString *cachesDirectory = [paths objectAtIndex:0];
     BOOL isDir = NO;
@@ -123,9 +138,11 @@
         [[NSFileManager defaultManager] createDirectoryAtPath:cachesDirectory withIntermediateDirectories:NO attributes:nil error:&error];
     }
     NSString *imagePath =[cachesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"img%@.jpeg", TIMESTAMP]];
+        
     CDVPluginResult* result = nil;
     
     if (asBase64) {
+        NSLog(@"Is Base64 Image");
         NSData *imageBase64 = [imageData base64EncodedDataWithOptions:NSDataBase64Encoding64CharacterLineLength];
         NSString *imageBase64String = [[NSString alloc] initWithData:imageBase64 encoding:NSUTF8StringEncoding];
         NSString *imageBase64URL = [NSString stringWithFormat:@"%@%@", @"data:image/jpeg;base64,", imageBase64String];
@@ -133,10 +150,12 @@
     }
     else if (![imageData writeToFile:imagePath atomically:NO])
     {
+        NSLog(@"Failed to writeToFile: %@", imagePath);
         result = [CDVPluginResult resultWithStatus:CDVCommandStatus_IO_EXCEPTION messageAsString:@"error save image"];
     }
     else
     {
+        NSLog(@"OK to writeToFile: %@", imagePath);
         result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:[[NSURL fileURLWithPath:imagePath] absoluteString]];
     }
     
@@ -151,7 +170,8 @@
     CGRect sizeRect = (CGRect) {.size = image.size};
     CGRect destRect = CGRectApplyAffineTransform(sizeRect, t);
     CGSize destinationSize = destRect.size;
-    
+    NSLog(@"destinationSize = %@", destinationSize);
+
     // Draw image
     UIGraphicsBeginImageContext(destinationSize);
     CGContextRef context = UIGraphicsGetCurrentContext();
